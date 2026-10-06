@@ -31,25 +31,37 @@ def download_audio():
     if not video_id:
         return jsonify({"error": "No video ID provided"}), 400
 
-    temp_dir = tempfile.gettempdir()
+    # Option B: The Mercenary API
+    RAPIDAPI_KEY = "366a2a11d9mshfa848bdd8cef305p172a00jsn953cbb31a727"
     
-    # Download the native m4a audio stream
-    # Download the native m4a audio stream using your cookie disguise
-    ydl_opts = {
-        'format': '140',
-        'outtmpl': os.path.join(temp_dir, f"{video_id}.%(ext)s"),
-        'quiet': True,
-        'noplaylist': True,
-        'cookiefile': 'cookies.txt',
-        'extractor_args': {'youtube': {'client': ['android']}}
+    url = "https://youtube-mp36.p.rapidapi.com/dl"
+    querystring = {"id": video_id}
+    headers = {
+        "x-rapidapi-key": RAPIDAPI_KEY,
+        "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
     }
 
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=True)
-            downloaded_file = ydl.prepare_filename(info)
+        # 1. Ask the API to bypass YouTube and get the raw download link
+        api_response = requests.get(url, headers=headers, params=querystring)
+        data = api_response.json()
         
-        # Send the file back to the browser
-        return send_file(downloaded_file, as_attachment=True, mimetype='audio/mp4')
+        if "link" not in data:
+            return jsonify({"error": "Third-party API failed to extract audio."}), 500
+            
+        audio_url = data["link"]
+        
+        # 2. Download the actual audio file from their server to Render
+        audio_file = requests.get(audio_url, stream=True)
+        
+        # 3. Save it temporarily and push it securely to the user's phone
+        temp_file = os.path.join(tempfile.gettempdir(), f"{video_id}.mp3")
+        with open(temp_file, 'wb') as f:
+            for chunk in audio_file.iter_content(chunk_size=1024):
+                if chunk:
+                    f.write(chunk)
+                    
+        return send_file(temp_file, as_attachment=True, mimetype='audio/mp3')
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
