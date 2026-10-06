@@ -35,7 +35,7 @@ def download_audio():
     
     # Download the native m4a audio stream
     ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio',
+        'format': '140',
         'outtmpl': os.path.join(temp_dir, f"{video_id}.%(ext)s"),
         'quiet': True,
         'noplaylist': True
