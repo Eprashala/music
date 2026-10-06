@@ -17,9 +17,7 @@ def search_youtube():
     if not query:
         return jsonify({"error": "No query provided"}), 400
         
-    # MAKE SURE YOUR ACTUAL API KEY IS HERE
-    YOUTUBE_API_KEY = 'YOUR_API_KEY_HERE'
-    
+ 
     search_url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=12&q={query}&type=video&key={YOUTUBE_API_KEY}"
     
     try:
