@@ -45,63 +45,52 @@ def search_youtube():
         return jsonify({"error": str(e)}), 500
 
 def get_unlimited_stream_url(video_id):
-    """Fetches raw audio from the Piped network, using multiple backup servers to ensure uptime"""
+    """Fetches raw audio using multiple open-source networks (Piped & Invidious) and browser disguises."""
     
-    # A list of different decentralized Piped servers
-    instances = [
+    # 1. Disguise the Python server as a normal Google Chrome desktop browser
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+    
+    last_error = "Unknown"
+    
+    # 2. Try the Piped Network First
+    piped_instances = [
         "https://pipedapi.kavin.rocks",
-        "https://pipedapi.syncpundit.io",
-        "https://api.piped.projectsegfau.lt"
+        "https://pipedapi.syncpundit.io"
     ]
-    
-    last_error = ""
-    
-    # Loop through the servers until one successfully provides the audio stream
-    for base_url in instances:
+    for base in piped_instances:
         try:
-            res = requests.get(f"{base_url}/streams/{video_id}", timeout=10).json()
-            if 'error' in res:
-                continue
-                
-            audio_streams = res.get('audioStreams', [])
-            if audio_streams:
-                # Grab the native m4a/mp4 audio stream 
-                best_stream = next((s for s in audio_streams if 'mp4' in s.get('mimeType', '')), audio_streams[0])
-                return best_stream['url']
+            r = requests.get(f"{base}/streams/{video_id}", headers=headers, timeout=8)
+            if r.status_code == 200: # Only try to read it if Cloudflare let us through
+                data = r.json()
+                streams = data.get('audioStreams', [])
+                if streams:
+                    best = next((s for s in streams if 'mp4' in s.get('mimeType', '')), streams[0])
+                    return best['url']
         except Exception as e:
-            last_error = str(e)
-            continue # If this server crashes or times out, silently try the next one
+            last_error = f"Piped error: {str(e)}"
+            continue
             
-    # If every single backup server fails, report the error
-    raise Exception(f"All Piped proxy servers failed. Last error: {last_error}")
+    # 3. Try the Invidious Network as a Backup
+    invidious_instances = [
+        "https://vid.puffyan.us",
+        "https://invidious.slipfox.xyz"
+    ]
+    for base in invidious_instances:
+        try:
+            r = requests.get(f"{base}/api/v1/videos/{video_id}", headers=headers, timeout=8)
+            if r.status_code == 200:
+                data = r.json()
+                streams = data.get('adaptiveFormats', [])
+                audio_streams = [s for s in streams if 'audio' in s.get('type', '')]
+                if audio_streams:
+                    best = next((s for s in audio_streams if 'mp4' in s.get('type', '')), audio_streams[0])
+                    return best['url']
+        except Exception as e:
+            last_error = f"Invidious error: {str(e)}"
+            continue
 
-@app.route('/get_stream', methods=['GET'])
-def stream_audio():
-    # New endpoint: Feeds raw audio directly to the browser for screen-off playback
-    video_id = request.args.get('v')
-    if not video_id:
-        return jsonify({"error": "No video ID"}), 400
-    try:
-        url = get_unlimited_stream_url(video_id)
-        return jsonify({"stream_url": url})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/download', methods=['GET'])
-def download_audio():
-    # Upgraded endpoint: Unlimited offline downloads
-    video_id = request.args.get('v')
-    try:
-        audio_url = get_unlimited_stream_url(video_id)
-        
-        # Download file to the Render server temporarily, then push to phone
-        audio_file = requests.get(audio_url, stream=True)
-        temp_file = os.path.join(tempfile.gettempdir(), f"{video_id}.m4a")
-        
-        with open(temp_file, 'wb') as f:
-            for chunk in audio_file.iter_content(chunk_size=1024):
-                if chunk: f.write(chunk)
-                
-        return send_file(temp_file, as_attachment=True, mimetype='audio/mp4')
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # If every server on both networks fails, report the final error
+    raise Exception(f"All open-source proxy networks blocked the connection. Last error: {last_error}")
