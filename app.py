@@ -45,15 +45,35 @@ def search_youtube():
         return jsonify({"error": str(e)}), 500
 
 def get_unlimited_stream_url(video_id):
-    """Fetches the raw audio stream from the decentralized Piped network to bypass bot detection"""
-    res = requests.get(f"https://pipedapi.kavin.rocks/streams/{video_id}").json()
-    audio_streams = res.get('audioStreams', [])
-    if not audio_streams:
-        raise Exception("Failed to extract audio stream")
+    """Fetches raw audio from the Piped network, using multiple backup servers to ensure uptime"""
     
-    # Grab the native m4a/mp4 audio stream 
-    best_stream = next((s for s in audio_streams if 'mp4' in s.get('mimeType', '')), audio_streams[0])
-    return best_stream['url']
+    # A list of different decentralized Piped servers
+    instances = [
+        "https://pipedapi.kavin.rocks",
+        "https://pipedapi.syncpundit.io",
+        "https://api.piped.projectsegfau.lt"
+    ]
+    
+    last_error = ""
+    
+    # Loop through the servers until one successfully provides the audio stream
+    for base_url in instances:
+        try:
+            res = requests.get(f"{base_url}/streams/{video_id}", timeout=10).json()
+            if 'error' in res:
+                continue
+                
+            audio_streams = res.get('audioStreams', [])
+            if audio_streams:
+                # Grab the native m4a/mp4 audio stream 
+                best_stream = next((s for s in audio_streams if 'mp4' in s.get('mimeType', '')), audio_streams[0])
+                return best_stream['url']
+        except Exception as e:
+            last_error = str(e)
+            continue # If this server crashes or times out, silently try the next one
+            
+    # If every single backup server fails, report the error
+    raise Exception(f"All Piped proxy servers failed. Last error: {last_error}")
 
 @app.route('/get_stream', methods=['GET'])
 def stream_audio():
