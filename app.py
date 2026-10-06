@@ -17,11 +17,32 @@ def search_youtube():
     if not query:
         return jsonify({"error": "No query provided"}), 400
         
-    url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=12&q={query}&type=video&key={YOUTUBE_API_KEY}"
+    # MAKE SURE YOUR ACTUAL API KEY IS HERE
+    YOUTUBE_API_KEY = 'YOUR_API_KEY_HERE'
+    
+    search_url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=12&q={query}&type=video&key={YOUTUBE_API_KEY}"
     
     try:
-        youtube_response = requests.get(url)
-        return jsonify(youtube_response.json()) 
+        search_response = requests.get(search_url).json()
+        
+        # 1. Extract IDs from the search results
+        video_ids = ",".join([item['id']['videoId'] for item in search_response.get('items', []) if 'id' in item and 'videoId' in item['id']])
+        
+        # 2. Ask YouTube for the durations of those specific IDs
+        if video_ids:
+            duration_url = f"https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id={video_ids}&key={YOUTUBE_API_KEY}"
+            duration_response = requests.get(duration_url).json()
+            
+            # Map the durations to their IDs
+            durations = {item['id']: item['contentDetails']['duration'] for item in duration_response.get('items', [])}
+            
+            # 3. Inject the durations back into the search results
+            for item in search_response.get('items', []):
+                vid = item['id'].get('videoId')
+                if vid in durations:
+                    item['snippet']['duration'] = durations[vid]
+                    
+        return jsonify(search_response)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
