@@ -34,11 +34,13 @@ def download_audio():
     temp_dir = tempfile.gettempdir()
     
     # Download the native m4a audio stream
+    # Download the native m4a audio stream using your cookie disguise
     ydl_opts = {
         'format': '140',
         'outtmpl': os.path.join(temp_dir, f"{video_id}.%(ext)s"),
         'quiet': True,
         'noplaylist': True,
+        'cookiefile': 'cookies.txt',
         'extractor_args': {'youtube': {'client': ['android']}}
     }
 
