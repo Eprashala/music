@@ -46,43 +46,44 @@ def search_youtube():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/download', methods=['GET'])
-def download_audio():
+def get_unlimited_stream_url(video_id):
+    """Fetches the raw audio stream from the decentralized Piped network to bypass bot detection"""
+    res = requests.get(f"https://pipedapi.kavin.rocks/streams/{video_id}").json()
+    audio_streams = res.get('audioStreams', [])
+    if not audio_streams:
+        raise Exception("Failed to extract audio stream")
+    
+    # Grab the native m4a/mp4 audio stream 
+    best_stream = next((s for s in audio_streams if 'mp4' in s.get('mimeType', '')), audio_streams[0])
+    return best_stream['url']
+
+@app.route('/get_stream', methods=['GET'])
+def stream_audio():
+    # New endpoint: Feeds raw audio directly to the browser for screen-off playback
     video_id = request.args.get('v')
     if not video_id:
-        return jsonify({"error": "No video ID provided"}), 400
-
-    # Option B: The Mercenary API
-    RAPIDAPI_KEY = "366a2a11d9mshfa848bdd8cef305p172a00jsn953cbb31a727"
-    
-    url = "https://youtube-mp36.p.rapidapi.com/dl"
-    querystring = {"id": video_id}
-    headers = {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
-    }
-
+        return jsonify({"error": "No video ID"}), 400
     try:
-        # 1. Ask the API to bypass YouTube and get the raw download link
-        api_response = requests.get(url, headers=headers, params=querystring)
-        data = api_response.json()
+        url = get_unlimited_stream_url(video_id)
+        return jsonify({"stream_url": url})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/download', methods=['GET'])
+def download_audio():
+    # Upgraded endpoint: Unlimited offline downloads
+    video_id = request.args.get('v')
+    try:
+        audio_url = get_unlimited_stream_url(video_id)
         
-        if "link" not in data:
-            return jsonify({"error": "Third-party API failed to extract audio."}), 500
-            
-        audio_url = data["link"]
-        
-        # 2. Download the actual audio file from their server to Render
+        # Download file to the Render server temporarily, then push to phone
         audio_file = requests.get(audio_url, stream=True)
+        temp_file = os.path.join(tempfile.gettempdir(), f"{video_id}.m4a")
         
-        # 3. Save it temporarily and push it securely to the user's phone
-        temp_file = os.path.join(tempfile.gettempdir(), f"{video_id}.mp3")
         with open(temp_file, 'wb') as f:
             for chunk in audio_file.iter_content(chunk_size=1024):
-                if chunk:
-                    f.write(chunk)
-                    
-        return send_file(temp_file, as_attachment=True, mimetype='audio/mp3')
-
+                if chunk: f.write(chunk)
+                
+        return send_file(temp_file, as_attachment=True, mimetype='audio/mp4')
     except Exception as e:
         return jsonify({"error": str(e)}), 500
