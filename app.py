@@ -38,7 +38,8 @@ def download_audio():
         'format': '140',
         'outtmpl': os.path.join(temp_dir, f"{video_id}.%(ext)s"),
         'quiet': True,
-        'noplaylist': True
+        'noplaylist': True,
+        'extractor_args': {'youtube': {'client': ['android']}}
     }
 
     try:
